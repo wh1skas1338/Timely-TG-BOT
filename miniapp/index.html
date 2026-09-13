@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Аврора — планировщик задач</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --font-display:'Unbounded', sans-serif;
+    --font-body:'Inter', sans-serif;
+    --accent-a:#ff5fa2;
+    --accent-b:#9b5cff;
+    --gradient: linear-gradient(135deg, var(--accent-a) 0%, var(--accent-b) 100%);
+    --gradient-soft: linear-gradient(135deg, rgba(255,95,162,.16) 0%, rgba(155,92,255,.16) 100%);
+    --danger:#ff4d6d;
+    --radius-lg:22px;
+    --radius-md:16px;
+    --radius-sm:10px;
+    --shadow-glow: 0 8px 30px rgba(155,92,255,.35);
+  }
+  [data-theme="dark"]{
+    --bg:#120a1c;
+    --bg-2:#1a1128;
+    --surface:#211735;
+    --surface-2:#2a1e42;
+    --text:#f6f1fb;
+    --text-muted:#a898c4;
+    --border:rgba(255,255,255,.08);
+  }
+  [data-theme="light"]{
+    --bg:#fdf5fb;
+    --bg-2:#ffffff;
+    --surface:#fbeaf6;
+    --surface-2:#ffffff;
+    --text:#2a1638;
+    --text-muted:#8877a0;
+    --border:rgba(43,19,57,.08);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:var(--font-body);
+    background:var(--bg);
+    color:var(--text);
+    overflow-x:hidden;
+    transition:background .3s ease, color .3s ease;
+  }
+  #app{
+    position:relative;
+    min-height:100vh;
+    padding:16px 16px 100px;
+    max-width:520px;
+    margin:0 auto;
+  }
+  #snow-canvas{
+    position:fixed; inset:0;
+    pointer-events:none;
+    z-index:5;
+    display:none;
+  }
+  #snow-canvas.on{display:block;}
+
+  /* ---------- Header ---------- */
+  .header{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:18px;
+  }
+  .greeting{ display:flex; flex-direction:column; gap:2px; }
+  .greeting .hello{
+    font-family:var(--font-display);
+    font-size:19px; font-weight:600;
+    background:var(--gradient);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .greeting .sub{ font-size:13px; color:var(--text-muted); }
+  .icon-btn{
+    width:42px; height:42px; border-radius:14px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text); cursor:pointer;
+    transition:transform .15s ease;
+  }
+  .icon-btn:active{ transform:scale(.92); }
+
+  /* ---------- Overdue / today carousel ---------- */
+  .section-label{
+    font-size:13px; font-weight:600; color:var(--text-muted);
+    margin:0 0 10px 2px; text-transform:none;
+  }
+  .carousel{
+    display:flex; gap:10px; overflow-x:auto; padding-bottom:6px; margin-bottom:22px;
+    scroll-snap-type:x proximity;
+  }
+  .carousel::-webkit-scrollbar{display:none;}
+  .alert-card{
+    scroll-snap-align:start;
+    flex:0 0 auto; width:210px;
+    background:var(--surface);
+    border-radius:var(--radius-md);
+    padding:14px;
+    border:1.5px solid var(--border);
+    position:relative;
+  }
+  .alert-card.overdue{
+    border-color:var(--danger);
+    box-shadow:0 0 0 1px var(--danger), 0 8px 24px rgba(255,77,109,.25);
+  }
+  .alert-card .badge{
+    font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px;
+    display:inline-block; margin-bottom:8px;
+  }
+  .alert-card.overdue .badge{ background:rgba(255,77,109,.15); color:var(--danger); }
+  .alert-card.today .badge{ background:var(--gradient-soft); color:var(--accent-b); }
+  .alert-card .title{ font-size:14.5px; font-weight:600; line-height:1.3; margin-bottom:6px; }
+  .alert-card .time{ font-size:12px; color:var(--text-muted); }
+  .empty-mini{ font-size:13px; color:var(--text-muted); padding:14px 2px;}
+
+  /* ---------- Week strip ---------- */
+  .week-strip{
+    display:flex; justify-content:space-between; gap:6px; margin-bottom:20px;
+  }
+  .day-pill{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:10px 0 12px; border-radius:16px; cursor:pointer;
+    border:1px solid transparent; background:var(--surface);
+    transition:transform .15s ease;
+  }
+  .day-pill .dow{ font-size:11px; color:var(--text-muted); font-weight:600; }
+  .day-pill .num{ font-size:15px; font-weight:700; }
+  .day-pill.active{ background:var(--gradient); box-shadow:var(--shadow-glow); }
+  .day-pill.active .dow, .day-pill.active .num{ color:#fff; }
+  .day-pill.has-tasks:not(.active)::after{
+    content:''; width:5px; height:5px; border-radius:50%; background:var(--accent-a); margin-top:-2px;
+  }
+  .day-pill:active{ transform:scale(.94); }
+
+  /* ---------- Task list ---------- */
+  .list-title{
+    font-family:var(--font-display);
+    font-size:16px; font-weight:600; margin:4px 2px 12px;
+  }
+  .task{
+    display:flex; align-items:center; gap:12px;
+    background:var(--surface); border-radius:var(--radius-md);
+    padding:13px 14px; margin-bottom:10px;
+    border-left:4px solid var(--accent-b);
+    position:relative;
+  }
+  .task.tier1{ border-left-color:var(--accent-a); }
+  .task.tier2{ border-left-color:var(--text-muted); opacity:.9; }
+  .task.overdue{ border-left-color:var(--danger); box-shadow:0 0 0 1.5px var(--danger); }
+  .task.done{ opacity:.45; }
+  .task.done .task-title{ text-decoration:line-through; }
+  .task-check{
+    width:24px; height:24px; border-radius:50%; flex:0 0 auto;
+    border:2px solid var(--text-muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .task.done .task-check{ background:var(--gradient); border-color:transparent; color:#fff; font-size:13px; }
+  .task-body{ flex:1; min-width:0; }
+  .task-title{ font-size:14.5px; font-weight:600; }
+  .task-meta{ font-size:12px; color:var(--text-muted); margin-top:3px; display:flex; gap:8px; }
+  .tier-tag{ font-size:11px; font-weight:700; padding:2px 7px; border-radius:20px; }
+  .tier-tag.tier1{ background:rgba(255,95,162,.15); color:var(--accent-a); }
+  .tier-tag.tier2{ background:rgba(155,92,255,.12); color:var(--accent-b); }
+  .empty-day{
+    text-align:center; padding:40px 10px; color:var(--text-muted); font-size:14px;
+  }
+
+  /* ---------- FAB ---------- */
+  .fab{
+    position:fixed; right:20px; bottom:26px; z-index:20;
+    width:58px; height:58px; border-radius:50%;
+    background:var(--gradient); color:#fff; font-size:28px;
+    display:flex; align-items:center; justify-content:center;
+    border:none; box-shadow:var(--shadow-glow); cursor:pointer;
+  }
+  .fab:active{ transform:scale(.92); }
+
+  /* ---------- Sheets / overlays ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:30;
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .overlay.open{ opacity:1; pointer-events:auto; }
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; z-index:31;
+    background:var(--bg-2); border-radius:24px 24px 0 0;
+    padding:20px 20px calc(24px + env(safe-area-inset-bottom));
+    transform:translateY(100%); transition:transform .25s ease;
+    max-width:520px; margin:0 auto;
+  }
+  .sheet.open{ transform:translateY(0); }
+  .sheet-handle{ width:40px; height:4px; border-radius:4px; background:var(--border); margin:0 auto 16px; }
+  .sheet h3{ font-family:var(--font-display); font-size:17px; margin:0 0 16px; }
+  .field{ margin-bottom:14px; }
+  .field label{ font-size:12.5px; color:var(--text-muted); font-weight:600; display:block; margin-bottom:6px; }
+  .field input[type="text"], .field input[type="time"]{
+    width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--border);
+    background:var(--surface); color:var(--text); font-size:14.5px; font-family:var(--font-body);
+  }
+  .tier-select{ display:flex; gap:8px; }
+  .tier-opt{
+    flex:1; padding:12px; border-radius:12px; border:1.5px solid var(--border);
+    text-align:center; font-size:13.5px; font-weight:600; cursor:pointer; color:var(--text-muted);
+  }
+  .tier-opt.sel-tier1.active{ border-color:var(--accent-a); background:rgba(255,95,162,.1); color:var(--accent-a); }
+  .tier-opt.sel-tier2.active{ border-color:var(--accent-b); background:rgba(155,92,255,.1); color:var(--accent-b); }
+  .primary-btn{
+    width:100%; padding:15px; border:none; border-radius:14px;
+    background:var(--gradient); color:#fff; font-family:var(--font-display);
+    font-size:14.5px; font-weight:600; cursor:pointer; box-shadow:var(--shadow-glow);
+  }
+  .primary-btn:active{ transform:scale(.98); }
+
+  /* settings sheet */
+  .settings-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 2px; border-bottom:1px solid var(--border);
+  }
+  .settings-row:last-child{ border-bottom:none; }
+  .settings-row .label{ font-size:14.5px; font-weight:600; }
+  .settings-row .desc{ font-size:12px; color:var(--text-muted); margin-top:2px;}
+  .switch{
+    width:46px; height:27px; border-radius:20px; background:var(--surface);
+    border:1px solid var(--border); position:relative; cursor:pointer; flex:0 0 auto;
+  }
+  .switch .knob{
+    position:absolute; top:2px; left:2px; width:21px; height:21px; border-radius:50%;
+    background:var(--text-muted); transition:.2s ease;
+  }
+  .switch.on{ background:var(--gradient); }
+  .switch.on .knob{ left:21px; background:#fff; }
+  .theme-toggle{ display:flex; gap:8px; }
+  .theme-opt{
+    flex:1; padding:12px; border-radius:12px; border:1.5px solid var(--border);
+    text-align:center; font-size:13.5px; font-weight:600; cursor:pointer; color:var(--text-muted);
+  }
+  .theme-opt.active{ border-color:var(--accent-b); background:var(--gradient-soft); color:var(--text); }
+
+  /* reminder popup (in-app demo of push) */
+  .toast{
+    position:fixed; top:16px; left:16px; right:16px; z-index:40;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:16px;
+    padding:14px 16px; box-shadow:0 12px 30px rgba(0,0,0,.25);
+    transform:translateY(-140%); transition:transform .3s ease; max-width:488px; margin:0 auto;
+  }
+  .toast.show{ transform:translateY(0); }
+  .toast .t-title{ font-size:14px; font-weight:700; margin-bottom:8px; }
+  .toast button{
+    border:none; padding:9px 14px; border-radius:10px; background:var(--gradient);
+    color:#fff; font-weight:600; font-size:13px; cursor:pointer;
+  }
+</style>
+</head>
+<body data-theme="dark">
+<canvas id="snow-canvas"></canvas>
+<div class="toast" id="toast">
+  <div class="t-title" id="toastText">Время выполнять задачу «Оплатить интернет»</div>
+  <button id="toastBtn">Уже бегу! 🏃</button>
+</div>
+
+<div id="app">
+  <div class="header">
+    <div class="greeting">
+      <div class="hello" id="helloText">Привет!</div>
+      <div class="sub" id="dateSub"></div>
+    </div>
+    <div class="icon-btn" id="settingsBtn">⚙️</div>
+  </div>
+
+  <div class="section-label" id="alertsLabel">Сейчас важно</div>
+  <div class="carousel" id="carousel"></div>
+
+  <div class="week-strip" id="weekStrip"></div>
+
+  <div class="list-title" id="listTitle">Задачи</div>
+  <div id="taskList"></div>
+</div>
+
+<button class="fab" id="fabAdd">+</button>
+
+<div class="overlay" id="overlay"></div>
+
+<div class="sheet" id="addSheet">
+  <div class="sheet-handle"></div>
+  <h3>Новая задача</h3>
+  <div class="field">
+    <label>Название</label>
+    <input type="text" id="taskTitleInput" placeholder="Например: сходить в спортзал">
+  </div>
+  <div class="field">
+    <label>Время напоминания</label>
+    <input type="time" id="taskTimeInput" value="09:00">
+  </div>
+  <div class="field">
+    <label>Важность</label>
+    <div class="tier-select">
+      <div class="tier-opt sel-tier1 active" data-tier="1">1 тир · срочно</div>
+      <div class="tier-opt sel-tier2" data-tier="2">2 тир · обычная</div>
+    </div>
+  </div>
+  <button class="primary-btn" id="saveTaskBtn">Добавить задачу</button>
+</div>
+
+<div class="sheet" id="settingsSheet">
+  <div class="sheet-handle"></div>
+  <h3>Настройки</h3>
+  <div class="settings-row">
+    <div>
+      <div class="label">Тема оформления</div>
+    </div>
+  </div>
+  <div class="theme-toggle" style="margin-bottom:16px;">
+    <div class="theme-opt active" data-theme-choice="dark">🌙 Тёмная</div>
+    <div class="theme-opt" data-theme-choice="light">☀️ Светлая</div>
+  </div>
+  <div class="settings-row">
+    <div>
+      <div class="label">Снегопад</div>
+      <div class="desc">Фоновая анимация снега поверх приложения</div>
+    </div>
+    <div class="switch" id="snowSwitch"><div class="knob"></div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  if(tg){ tg.ready(); tg.expand(); }
+
+  /* ---------- Storage: Telegram CloudStorage with in-memory fallback ---------- */
+  const memoryStore = {};
+  const Storage = {
+    get(key){
+      return new Promise((resolve)=>{
+        if(tg && tg.CloudStorage){
+          tg.CloudStorage.getItem(key, (err, value)=> resolve(err ? null : value));
+        } else {
+          resolve(memoryStore[key] ?? null);
+        }
+      });
+    },
+    set(key, value){
+      return new Promise((resolve)=>{
+        memoryStore[key] = value;
+        if(tg && tg.CloudStorage){
+          tg.CloudStorage.setItem(key, value, ()=> resolve());
+        } else { resolve(); }
+      });
+    }
+  };
+
+  /* ---------- Demo state (real app: fetch from bot backend API) ---------- */
+  const DOW = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+  const DOW_ORDER = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+
+  function fmtDate(d){ return d.toISOString().slice(0,10); }
+  function todayStart(){ const d = new Date(); d.setHours(0,0,0,0); return d; }
+
+  const today = todayStart();
+  const weekDates = [];
+  const monday = new Date(today);
+  const jsDow = today.getDay(); // 0=Sun
+  const diffToMonday = (jsDow === 0 ? -6 : 1 - jsDow);
+  monday.setDate(monday.getDate() + diffToMonday);
+  for(let i=0;i<7;i++){
+    const d = new Date(monday); d.setDate(monday.getDate()+i);
+    weekDates.push(d);
+  }
+
+  let selectedDate = fmtDate(today);
+
+  // seed demo tasks — the real bot backend replaces this with a fetch('/api/tasks')
+  let tasks = [
+    {id:1, title:'Отправить отчёт руководителю', date: fmtDate(today), time:'09:00', tier:1, done:false},
+    {id:2, title:'Позвонить в поддержку интернет-провайдера', date: fmtDate(new Date(today.getTime()-86400000)), time:'12:00', tier:1, done:false},
+    {id:3, title:'Купить корм для кота', date: fmtDate(today), time:'18:30', tier:2, done:false},
+    {id:4, title:'Тренировка в зале', date: fmtDate(new Date(today.getTime()+86400000)), time:'19:00', tier:2, done:false},
+  ];
+  let nextId = 5;
+
+  function isOverdue(t){
+    if(t.done) return false;
+    const now = new Date();
+    const dt = new Date(t.date+'T'+t.time+':00');
+    return dt < now;
+  }
+  function isToday(t){ return t.date === fmtDate(today); }
+
+  /* ---------- Header greeting ---------- */
+  const hour = new Date().getHours();
+  const helloWord = hour<5?'Доброй ночи':hour<12?'Доброе утро':hour<18?'Добрый день':'Добрый вечер';
+  document.getElementById('helloText').textContent = helloWord + (tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? ', ' + tg.initDataUnsafe.user.first_name : '');
+  document.getElementById('dateSub').textContent = today.toLocaleDateString('ru-RU', {day:'numeric', month:'long', weekday:'long'});
+
+  /* ---------- Carousel of urgent items ---------- */
+  function renderCarousel(){
+    const el = document.getElementById('carousel');
+    const urgent = tasks.filter(t => !t.done && (isOverdue(t) || isToday(t)))
+                         .sort((a,b)=> (isOverdue(b)-isOverdue(a)) || a.time.localeCompare(b.time));
+    if(urgent.length===0){
+      el.innerHTML = '<div class="empty-mini">Просроченных и срочных задач нет 🎉</div>';
+      return;
+    }
+    el.innerHTML = urgent.map(t=>{
+      const overdue = isOverdue(t);
+      return `<div class="alert-card ${overdue?'overdue':'today'}">
+        <span class="badge">${overdue?'Просрочено':'Сегодня'}</span>
+        <div class="title">${escapeHtml(t.title)}</div>
+        <div class="time">⏰ ${t.time} · ${t.tier===1?'1 тир':'2 тир'}</div>
+      </div>`;
+    }).join('');
+  }
+
+  /* ---------- Week strip ---------- */
+  function renderWeek(){
+    const el = document.getElementById('weekStrip');
+    el.innerHTML = weekDates.map((d,i)=>{
+      const dateStr = fmtDate(d);
+      const active = dateStr === selectedDate;
+      const has = tasks.some(t=>t.date===dateStr);
+      return `<div class="day-pill ${active?'active':''} ${has?'has-tasks':''}" data-date="${dateStr}">
+        <div class="dow">${DOW_ORDER[i]}</div>
+        <div class="num">${d.getDate()}</div>
+      </div>`;
+    }).join('');
+    el.querySelectorAll('.day-pill').forEach(p=>{
+      p.addEventListener('click', ()=>{ selectedDate = p.dataset.date; if(tg) tg.HapticFeedback && tg.HapticFeedback.selectionChanged(); renderAll(); });
+    });
+  }
+
+  /* ---------- Task list for selected day ---------- */
+  function renderList(){
+    const el = document.getElementById('taskList');
+    const titleEl = document.getElementById('listTitle');
+    const d = new Date(selectedDate+'T00:00:00');
+    titleEl.textContent = 'Задачи на ' + d.toLocaleDateString('ru-RU', {day:'numeric', month:'long'});
+    const dayTasks = tasks.filter(t=>t.date===selectedDate).sort((a,b)=> a.time.localeCompare(b.time));
+    if(dayTasks.length===0){
+      el.innerHTML = '<div class="empty-day">На этот день пока ничего не запланировано.<br>Нажмите «+», чтобы добавить задачу.</div>';
+      return;
+    }
+    el.innerHTML = dayTasks.map(t=>{
+      const overdue = isOverdue(t);
+      return `<div class="task tier${t.tier} ${overdue?'overdue':''} ${t.done?'done':''}" data-id="${t.id}">
+        <div class="task-check">${t.done?'✓':''}</div>
+        <div class="task-body">
+          <div class="task-title">${escapeHtml(t.title)}</div>
+          <div class="task-meta">
+            <span>⏰ ${t.time}</span>
+            <span class="tier-tag tier${t.tier}">${t.tier===1?'1 тир':'2 тир'}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    el.querySelectorAll('.task-check').forEach(chk=>{
+      chk.addEventListener('click', (e)=>{
+        const id = Number(e.target.closest('.task').dataset.id);
+        const t = tasks.find(x=>x.id===id);
+        t.done = !t.done;
+        if(tg) tg.HapticFeedback && tg.HapticFeedback.impactOccurred('light');
+        renderAll();
+      });
+    });
+  }
+
+  function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function renderAll(){ renderCarousel(); renderWeek(); renderList(); }
+  renderAll();
+
+  /* ---------- Add task sheet ---------- */
+  const overlay = document.getElementById('overlay');
+  const addSheet = document.getElementById('addSheet');
+  const settingsSheet = document.getElementById('settingsSheet');
+  let chosenTier = 1;
+
+  function openSheet(sheet){ overlay.classList.add('open'); sheet.classList.add('open'); }
+  function closeSheets(){ overlay.classList.remove('open'); addSheet.classList.remove('open'); settingsSheet.classList.remove('open'); }
+  overlay.addEventListener('click', closeSheets);
+
+  document.getElementById('fabAdd').addEventListener('click', ()=> openSheet(addSheet));
+  document.getElementById('settingsBtn').addEventListener('click', ()=> openSheet(settingsSheet));
+
+  document.querySelectorAll('.tier-opt').forEach(opt=>{
+    opt.addEventListener('click', ()=>{
+      document.querySelectorAll('.tier-opt').forEach(o=>o.classList.remove('active'));
+      opt.classList.add('active');
+      chosenTier = Number(opt.dataset.tier);
+    });
+  });
+
+  document.getElementById('saveTaskBtn').addEventListener('click', ()=>{
+    const title = document.getElementById('taskTitleInput').value.trim();
+    const time = document.getElementById('taskTimeInput').value || '09:00';
+    if(!title){
+      if(tg) tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('error');
+      return;
+    }
+    tasks.push({id:nextId++, title, date:selectedDate, time, tier:chosenTier, done:false});
+    document.getElementById('taskTitleInput').value = '';
+    closeSheets();
+    renderAll();
+    // В реальном боте здесь идёт fetch('/api/tasks', {method:'POST', body: JSON.stringify(...)})
+    // бэкенд сохраняет задачу и планирует напоминание на нужное время.
+  });
+
+  /* ---------- Settings: theme ---------- */
+  async function applyTheme(theme){
+    document.body.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-opt').forEach(o=> o.classList.toggle('active', o.dataset.themeChoice===theme));
+    await Storage.set('theme', theme);
+  }
+  document.querySelectorAll('.theme-opt').forEach(opt=>{
+    opt.addEventListener('click', ()=> applyTheme(opt.dataset.themeChoice));
+  });
+
+  /* ---------- Settings: snow toggle ---------- */
+  const snowSwitch = document.getElementById('snowSwitch');
+  const canvas = document.getElementById('snow-canvas');
+  let snowOn = false;
+  let snowAnim = null;
+
+  function startSnow(){
+    canvas.classList.add('on');
+    const ctx = canvas.getContext('2d');
+    function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+    const flakes = Array.from({length:70}, ()=>({
+      x: Math.random()*window.innerWidth,
+      y: Math.random()*window.innerHeight,
+      r: Math.random()*2.5+1,
+      spd: Math.random()*0.8+0.4,
+      drift: Math.random()*0.6-0.3
+    }));
+    function tick(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      flakes.forEach(f=>{
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.r, 0, Math.PI*2);
+        ctx.fill();
+        f.y += f.spd; f.x += f.drift;
+        if(f.y > window.innerHeight){ f.y = -5; f.x = Math.random()*window.innerWidth; }
+      });
+      snowAnim = requestAnimationFrame(tick);
+    }
+    tick();
+    canvas._resizeHandler = resize;
+  }
+  function stopSnow(){
+    canvas.classList.remove('on');
+    if(snowAnim) cancelAnimationFrame(snowAnim);
+    if(canvas._resizeHandler) window.removeEventListener('resize', canvas._resizeHandler);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
+  async function setSnow(on){
+    snowOn = on;
+    snowSwitch.classList.toggle('on', on);
+    if(on) startSnow(); else stopSnow();
+    await Storage.set('snow', on ? '1' : '0');
+  }
+  snowSwitch.addEventListener('click', ()=> setSnow(!snowOn));
+
+  /* ---------- Init saved prefs ---------- */
+  (async ()=>{
+    const savedTheme = await Storage.get('theme');
+    if(savedTheme) applyTheme(savedTheme);
+    else if(tg && tg.colorScheme) applyTheme(tg.colorScheme === 'light' ? 'light' : 'dark');
+
+    const savedSnow = await Storage.get('snow');
+    if(savedSnow === '1') setSnow(true);
+  })();
+
+  /* ---------- Demo of a reminder push ("Уже бегу!") ---------- */
+  // В реальной системе это сообщение прилетает от бота через Telegram (не через мини-апп),
+  // здесь показан пример того, как выглядит инлайн-кнопка подтверждения.
+  document.getElementById('toastBtn').addEventListener('click', ()=>{
+    document.getElementById('toast').classList.remove('show');
+    if(tg) tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success');
+  });
+  // Раскомментируйте для демонстрации всплытия уведомления:
+  // setTimeout(()=> document.getElementById('toast').classList.add('show'), 1500);
+
+  if(tg) tg.MainButton && tg.MainButton.hide();
+})();
+</script>
+</body>
+</html>
