@@ -16,6 +16,10 @@ app.use(express.json());
 // раздаём файлы мини-приложения (папка miniapp лежит внутри bot)
 app.use(express.static(path.join(__dirname, 'miniapp')));
 
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'miniapp', 'index.html'));
+});
+
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
 // --- Проверка подлинности Telegram.WebApp.initData ---------------------
