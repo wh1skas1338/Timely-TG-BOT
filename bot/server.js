@@ -17,7 +17,15 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'miniapp')));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'miniapp', 'index.html'));
+  const filePath = path.join(__dirname, 'miniapp', 'index.html'); // или 'bot', 'miniapp', 'index.html'
+  
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('❌ Ошибка отправки файла index.html:', err.message);
+      console.error('🔍 Сервер искал файл по пути:', filePath);
+      res.status(500).send(`Файл не найден по пути: ${filePath}`);
+    }
+  });
 });
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
