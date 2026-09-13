@@ -9,26 +9,37 @@ const cron = require('node-cron');
 const db = require('./db');
 const { bot, sendReminder } = require('./bot');
 
+// ... верхняя часть файла (require express, cors и т.д.) ...
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// раздаём файлы мини-приложения (папка miniapp лежит внутри bot)
-app.use(express.static(path.join(__dirname, 'miniapp')));
+// ⬇️ ВСТАВЛЯТЬ НАЧИНАЯ ОТСЮДА (вместо старой строки app.use(express.static...)) ⬇️
+const fs = require('fs');
+
+// Автоматический выбор пути для Railway и локальной разработки
+let miniappPath = path.join(__dirname, 'miniapp');
+if (!fs.existsSync(miniappPath)) {
+  miniappPath = path.join(__dirname, 'bot', 'miniapp');
+}
+
+app.use(express.static(miniappPath));
 
 app.get('/', (req, res) => {
-  const filePath = path.join(__dirname, 'miniapp', 'index.html'); // или 'bot', 'miniapp', 'index.html'
-  
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      console.error('❌ Ошибка отправки файла index.html:', err.message);
-      console.error('🔍 Сервер искал файл по пути:', filePath);
-      res.status(500).send(`Файл не найден по пути: ${filePath}`);
-    }
-  });
+  const indexPath = path.join(miniappPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send(`Файл index.html не найден по пути: ${indexPath}`);
+  }
 });
+// ⬆️ КОНЕЦ ВСТАВЛЯЕМОГО БЛОКА ⬆️
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
+
+// --- Проверка подлинности Telegram.WebApp.initData ---------------------
+// ... далее идет функция verifyInitData и остальной код ...
 
 // --- Проверка подлинности Telegram.WebApp.initData ---------------------
 // Мини-апп должен передавать initData в заголовке X-Telegram-Init-Data.
