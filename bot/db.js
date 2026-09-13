@@ -3,7 +3,12 @@ const Database = require('better-sqlite3');
 const path = require('path');
 
 const db = new Database(path.join(__dirname, 'tasks.db'));
-db.pragma('journal_mode = WAL');
+
+if (process.env.NODE_ENV === 'production') {
+  db.pragma('journal_mode = DELETE');
+} else {
+  db.pragma('journal_mode = WAL');
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -76,6 +81,11 @@ function markAcknowledged(id) {
 function getTask(id) {
   return db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id);
 }
+
+process.on('exit', () => db.close());
+process.on('SIGHUP', () => process.exit(128 + 1));
+process.on('SIGINT', () => process.exit(128 + 2));
+process.on('SIGTERM', () => process.exit(128 + 15));
 
 module.exports = {
   db,

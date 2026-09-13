@@ -377,13 +377,8 @@
   let selectedDate = fmtDate(today);
 
   // seed demo tasks — the real bot backend replaces this with a fetch('/api/tasks')
-  let tasks = [
-    {id:1, title:'Отправить отчёт руководителю', date: fmtDate(today), time:'09:00', tier:1, done:false},
-    {id:2, title:'Позвонить в поддержку интернет-провайдера', date: fmtDate(new Date(today.getTime()-86400000)), time:'12:00', tier:1, done:false},
-    {id:3, title:'Купить корм для кота', date: fmtDate(today), time:'18:30', tier:2, done:false},
-    {id:4, title:'Тренировка в зале', date: fmtDate(new Date(today.getTime()+86400000)), time:'19:00', tier:2, done:false},
-  ];
-  let nextId = 5;
+  let tasks = [];
+  let nextId = 1;
 
   function isOverdue(t){
     if(t.done) return false;
