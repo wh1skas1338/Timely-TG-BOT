@@ -14,18 +14,33 @@ if (!BOT_TOKEN) {
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 // /start — приветствие + кнопка запуска мини-приложения
-bot.onText(/\/start/, (msg) => {
+bot.onText(/\/start/, async (msg) => {
   db.upsertUser(msg.from.id, msg.from.first_name);
-  bot.sendMessage(msg.chat.id,
-    `Привет, ${msg.from.first_name}! Я помогу планировать задачи на неделю и напомню, когда придёт время.`,
-    {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: '📋 Открыть планировщик', web_app: { url: WEBAPP_URL } }
-        ]]
+
+  if (!WEBAPP_URL) {
+    // WEBAPP_URL не задан — не пытаемся слать кнопку с пустым url (Telegram её отклонит),
+    // просто предупреждаем в чате, чтобы это было видно сразу, а не только в логах.
+    console.error('⚠️ WEBAPP_URL не задан — кнопка мини-аппа не будет отправлена.');
+    await bot.sendMessage(msg.chat.id,
+      `Привет, ${msg.from.first_name}! Бот запущен, но переменная WEBAPP_URL ещё не настроена на сервере, поэтому кнопка приложения пока недоступна.`
+    ).catch(e => console.error('Не удалось отправить сообщение:', e.message));
+    return;
+  }
+
+  try {
+    await bot.sendMessage(msg.chat.id,
+      `Привет, ${msg.from.first_name}! Я помогу планировать задачи на неделю и напомню, когда придёт время.`,
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '📋 Открыть планировщик', web_app: { url: WEBAPP_URL } }
+          ]]
+        }
       }
-    }
-  );
+    );
+  } catch (e) {
+    console.error('Ошибка при отправке /start:', e.message);
+  }
 });
 
 // /today — быстрый текстовый список задач на сегодня (без мини-аппа)
@@ -81,5 +96,14 @@ async function sendReminder(task) {
     console.error('Не удалось отправить напоминание пользователю', task.telegram_id, e.message);
   }
 }
+
+// Подстраховка: необработанные ошибки Telegram API (сеть, неверные данные и т.п.)
+// не должны убивать весь процесс — просто логируем их.
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ Необработанная ошибка (unhandledRejection):', reason);
+});
+bot.on('polling_error', (err) => {
+  console.error('⚠️ Ошибка polling:', err.message);
+});
 
 module.exports = { bot, sendReminder };
