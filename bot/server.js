@@ -13,8 +13,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// раздаём файлы мини-приложения (папка ../miniapp с index.html)
-app.use(express.static(path.join(__dirname, '..', 'miniapp')));
+// раздаём файлы мини-приложения (папка miniapp лежит внутри bot)
+app.use(express.static(path.join(__dirname, 'miniapp')));
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
